@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lecture Notes Assistant</title>
+<meta name="description" content="A Hermes agent on Lark that turns a YouTube lecture into a Lark notes document with timestamps, key business terms and self-test questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#fbf8f2; --sheet:#ffffff; --ink:#1b2433; --muted:#5d6675; --rule:#e6e0d4; --rule-blue:#dfe7f3;
+  --accent:#e2702c; --accent-ink:#b4521a; --accent-wash:#fcebdf; --margin:#e9a3a3;
+  --ok:#2c7a4b; --ok-wash:#e0f0e6; --warn:#a1660a; --warn-wash:#fbefd9; --bad:#b23a3a; --bad-wash:#f8e1e1;
+  --me:#2f5bd8; --bot:#f1ede5;
+  --serif:'Fraunces',Georgia,serif; --sans:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#14171c; --sheet:#1c2027; --ink:#ecebe7; --muted:#a3a9b3; --rule:#2c313a; --rule-blue:#232a35;
+    --accent:#f08a4b; --accent-ink:#f6a774; --accent-wash:#3a2518; --margin:#6b3a3a;
+    --ok:#6cc58f; --ok-wash:#1d3326; --warn:#e3b25c; --warn-wash:#382c16; --bad:#ec8c8c; --bad-wash:#3a1f1f;
+    --me:#6f8ff0; --bot:#252a32;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14171c; --sheet:#1c2027; --ink:#ecebe7; --muted:#a3a9b3; --rule:#2c313a; --rule-blue:#232a35;
+  --accent:#f08a4b; --accent-ink:#f6a774; --accent-wash:#3a2518; --margin:#6b3a3a;
+  --ok:#6cc58f; --ok-wash:#1d3326; --warn:#e3b25c; --warn-wash:#382c16; --bad:#ec8c8c; --bad-wash:#3a1f1f;
+  --me:#6f8ff0; --bot:#252a32;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans)}
+a{color:var(--accent-ink);text-underline-offset:3px}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+h1,h2,h3{font-family:var(--serif);line-height:1.15;margin:0}
+h2{font-size:clamp(26px,4vw,34px);margin-bottom:6px}
+.kicker{font:500 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:10px}
+.sub{color:var(--muted);max-width:640px;margin:0 0 26px}
+section{padding:64px 0;border-top:1px solid var(--rule)}
+
+/* hero: a notebook page */
+.hero{padding:48px 0 56px}
+.page{position:relative;background:var(--sheet);border:1px solid var(--rule);border-radius:4px;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--rule-blue) 31px 32px);
+  padding:36px 28px 32px 72px;box-shadow:0 18px 40px -28px rgba(27,36,51,.35)}
+.page::before{content:"";position:absolute;top:0;bottom:0;left:52px;width:2px;background:var(--margin)}
+.holes{position:absolute;left:18px;top:40px;display:grid;gap:64px}
+.holes i{width:14px;height:14px;border-radius:50%;background:var(--paper);border:1px solid var(--rule);display:block}
+.hero h1{font-size:clamp(36px,6.4vw,64px);letter-spacing:-.01em}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.lead{font-size:clamp(17px,2.2vw,20px);max-width:620px;margin:14px 0 26px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:2px solid var(--ink);max-width:720px}
+.facts div{padding:12px 14px 4px 0}
+.facts b{display:block;font:700 clamp(22px,3.4vw,30px)/1.1 var(--serif)}
+.facts span{font-size:13.5px;color:var(--muted)}
+.stamp{position:absolute;right:22px;top:22px;transform:rotate(4deg);border:2px solid var(--accent);color:var(--accent);
+  font:500 12px/1.2 var(--mono);padding:6px 10px;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;background:var(--sheet)}
+
+/* before / now */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.card{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:22px}
+.card h3{font-size:20px;margin-bottom:8px}
+.card.now{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.card ol{margin:0;padding-left:20px}
+.card .time{font:500 13px var(--mono);color:var(--muted);margin-top:12px}
+
+/* steps */
+.steps{list-style:none;margin:0;padding:0;counter-reset:s;display:grid;gap:0;border-left:2px dashed var(--rule);margin-left:12px}
+.steps li{counter-increment:s;position:relative;padding:0 0 22px 32px}
+.steps li::before{content:counter(s);position:absolute;left:-14px;top:0;width:26px;height:26px;border-radius:50%;
+  background:var(--ink);color:var(--paper);font:500 13px/26px var(--mono);text-align:center}
+.steps b{display:block}
+.steps span{color:var(--muted);font-size:15px}
+.branches{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:10px}
+.branch{border:1px solid var(--rule);border-radius:4px;padding:14px;background:var(--sheet);font-size:14.5px}
+.branch b{font:500 12px var(--mono);color:var(--accent-ink);display:block;margin-bottom:4px}
+
+/* example */
+.example{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:22px;align-items:start}
+.chat{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:16px}
+.chat-head{font-weight:600;display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--rule);margin-bottom:14px}
+.av{width:30px;height:30px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;font:500 12px var(--mono)}
+.msg{padding:10px 13px;border-radius:10px;margin-bottom:10px;font-size:14.5px;overflow-wrap:anywhere}
+.msg.me{background:var(--me);color:#fff;margin-left:18%;border-bottom-right-radius:3px}
+.msg.bot{background:var(--bot);margin-right:6%;border-bottom-left-radius:3px}
+.msg ul{margin:6px 0;padding-left:18px}
+.note{font:500 12px var(--mono);color:var(--muted)}
+.doc{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:22px 22px 18px}
+.doc h3{font-size:21px;margin-bottom:6px}
+.doc .info{font-size:13px;color:var(--muted);border-bottom:1px solid var(--rule);padding-bottom:10px;margin-bottom:12px}
+.doc h4{font:600 14px var(--sans);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-ink)}
+.doc p{margin:0;font-size:14.5px}
+.ts{list-style:none;margin:0;padding:0;font-size:14.5px}
+.ts li{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:5px 0;border-bottom:1px dotted var(--rule)}
+.ts code{font:500 13px var(--mono);color:var(--accent-ink)}
+.terms{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.terms li{border:1px solid var(--rule);border-radius:3px;padding:2px 8px;font-size:13.5px}
+.doc .foot{font-size:12.5px;color:var(--muted);margin-top:14px}
+
+/* tests */
+.table-scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--sheet)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.n{font-family:var(--mono);white-space:nowrap}
+.pill{display:inline-block;font:500 12px var(--mono);padding:2px 8px;border-radius:3px;white-space:nowrap}
+.pill.ok{background:var(--ok-wash);color:var(--ok)}
+.pill.warn{background:var(--warn-wash);color:var(--warn)}
+.pill.bad{background:var(--bad-wash);color:var(--bad)}
+.fixes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+.fix{border-left:3px solid var(--accent);padding:4px 0 4px 14px}
+.fix b{display:block}
+.fix span{color:var(--muted);font-size:15px}
+
+/* limits */
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.cols ul{margin:8px 0 0;padding-left:18px;font-size:15px}
+.cols h3{font-size:19px}
+.built{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.built div{border-top:2px solid var(--ink);padding-top:10px;font-size:14.5px}
+.built b{display:block;font-family:var(--serif);font-size:17px}
+footer{padding:36px 0 52px;border-top:1px solid var(--rule);color:var(--muted);font-size:14px}
+.notice{margin-bottom:10px}
+
+@media (max-width:820px){
+  .example,.vs,.fixes{grid-template-columns:1fr}
+  .branches,.built{grid-template-columns:1fr 1fr}
+  .cols{grid-template-columns:1fr}
+}
+@media (max-width:520px){
+  .page{padding:28px 16px 24px 44px}
+  .page::before{left:30px}
+  .holes{left:8px}
+  .holes i{width:10px;height:10px}
+  .stamp{position:static;display:inline-block;margin-bottom:14px}
+  .facts{grid-template-columns:1fr}
+  table{min-width:0}
+  thead{display:none}
+  tbody tr{display:grid;grid-template-columns:28px auto auto 1fr;gap:4px 12px;padding:12px;border-bottom:1px solid var(--rule)}
+  tbody td{border:0;padding:0}
+  tbody td:nth-child(2){grid-column:2/-1}
+  tbody td:nth-child(3){grid-column:2}
+  tbody td:nth-child(4)::before{content:"calls ";color:var(--muted)}
+  tbody td:nth-child(5){grid-column:2/-1}
+  .facts div{border-bottom:1px solid var(--rule);padding:10px 0}
+  .branches,.built{grid-template-columns:1fr}
+  .msg.me{margin-left:8%}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="page">
+      <div class="holes" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="stamp">Hermes · Lark</div>
+      <div class="kicker">AI agent for a business student</div>
+      <h1>Lecture Notes <em>Assistant</em></h1>
+      <p class="lead">Send a YouTube lecture link in a Lark chat. About half a minute later, a Lark document comes back with notes by timestamp, key business terms, takeaways and self-test questions.</p>
+      <div class="facts">
+        <div><b>60–100 min</b><span>taking notes by hand (estimate)</span></div>
+        <div><b>22–38 s</b><span>agent run on 9–12 min lectures (measured)</span></div>
+        <div><b>9 runs</b><span>real Lark tests, 2 bugs found and fixed</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<section>
+  <div class="wrap">
+    <div class="kicker">01 · Why</div>
+    <h2>From pause-and-type to send-and-check</h2>
+    <p class="sub">A second-year Business Administration student watches several course lectures a week (International Business, Production and Operations Management, Thinking and Decision Making…). The slow part is turning each video into notes worth revising from.</p>
+    <div class="vs">
+      <div class="card">
+        <h3>Before</h3>
+        <ol>
+          <li>Watch the lecture, pause to write down timestamps</li>
+          <li>Look up the business terms</li>
+          <li>Type the notes into a document</li>
+          <li>Write a few questions for revision</li>
+        </ol>
+        <div class="time">≈ 60–100 min per 15–30 min video · estimate, not timed</div>
+      </div>
+      <div class="card now">
+        <h3>Now</h3>
+        <ol>
+          <li>Paste the YouTube link into the Lark chat</li>
+          <li>Open the document link in the reply</li>
+          <li>Click 1–2 timestamps to check against the video</li>
+        </ol>
+        <div class="time">≈ 5 min · agent run measured at 22–38 s</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">02 · Workflow</div>
+    <h2>What the agent does with a link</h2>
+    <p class="sub">Two terminal commands from one Hermes skill, with the Profile deciding the rules.</p>
+    <ol class="steps">
+      <li><b>Find the YouTube link</b><span>watch, youtu.be, shorts, live or embed; several links → one document each.</span></li>
+      <li><b>Get title, channel, length and timestamped subtitles</b><span>command 1, <code>prepare.py</code>; long subtitles are split into ~40,000-character chunks.</span></li>
+      <li><b>Write the notes in 5 sections</b><span>Overview · Notes by timestamp · Key terms · Takeaways for study &amp; business · Self-test questions.</span></li>
+      <li><b>Self-check</b><span>timestamps come from the subtitles, increase and stay within the video length; nothing from outside the video.</span></li>
+      <li><b>Create the Lark document</b><span>command 2, <code>lark_doc.py</code>, with “anyone with the link can view”.</span></li>
+      <li><b>Reply in the chat</b><span>video title, 3–5 key points, the document link and the sharing scope.</span></li>
+    </ol>
+    <div class="branches">
+      <div class="branch"><b>A · no link</b>Ask for the link, run no command.</div>
+      <div class="branch"><b>B · broken video</b>Report the exact error, never guess from the title.</div>
+      <div class="branch"><b>C · doc fails</b>Retry once, then send the notes in the chat.</div>
+      <div class="branch"><b>D · special request</b>“For a presentation” → shorter reply, still 5 sections.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">03 · Real output</div>
+    <h2>One run, start to finish</h2>
+    <p class="sub">Test 7 on 07/11/2026, copied from the Lark chat and the document it created. Replied in 22.0 s with 3 model calls.</p>
+    <div class="example">
+      <div class="chat" aria-label="Lark conversation from test 7">
+        <div class="chat-head"><div class="av">LN</div>Lecture Notes Assistant</div>
+        <div class="msg me">Take notes on https://youtu.be/3ez10ADR_gM - keep it short, I need it for a 5-minute presentation.</div>
+        <div class="msg bot">
+          Done! Here's your exam prep doc:<br>
+          <b>Intro to Economics: Crash Course Econ #1</b> (CrashCourse · 11:56)<br>
+          Key points for your 5-minute presentation:
+          <ul>
+            <li><b>Economics = study of choices under scarcity</b>, not just money or the stock market</li>
+            <li><b>Opportunity cost:</b> every decision means giving up the next best alternative</li>
+            <li><b>Incentives drive behavior</b> — good policy designs the right ones; bad ones backfire</li>
+            <li><b>Micro vs macro:</b> individual/firm decisions vs the whole economy</li>
+            <li>…</li>
+          </ul>
+          📄 <a href="https://xjpyg4jeph2l.jp.larksuite.com/docx/LuGoduU5VoC3Ysx5Bpuj6zlUpgh" target="_blank" rel="noopener">Notes: Intro to Economics: Crash Course Econ #1</a><br>
+          <i>(anyone with the link can view)</i>
+        </div>
+        <div class="note">Hermes Agent v0.23.0 · agnes-2.5-flash</div>
+      </div>
+      <article class="doc" aria-label="Lark document from test 7">
+        <h3>Notes: Intro to Economics: Crash Course Econ #1</h3>
+        <div class="info">Channel: CrashCourse · Length: 11:56 · Subtitles: English · Link: YouTube</div>
+        <h4>Overview</h4>
+        <p>Economics as the study of people and choices under scarcity — not just money or the stock market — with opportunity cost, incentives, and micro vs macro.</p>
+        <h4>Notes by timestamp</h4>
+        <ul class="ts">
+          <li><code>01:50</code>What economics is and isn't</li>
+          <li><code>03:04</code>Opportunity cost and scarcity</li>
+          <li><code>04:52</code>Weighing benefits against costs</li>
+          <li><code>06:08</code>Guns versus butter — military spending</li>
+          <li><code>07:18</code>The role of incentives in policy</li>
+          <li><code>09:41</code>Microeconomics vs. macroeconomics</li>
+          <li><code>11:30</code>Why learn economics</li>
+        </ul>
+        <h4>Key terms</h4>
+        <ul class="terms"><li>Scarcity</li><li>Opportunity cost</li><li>Microeconomics</li><li>Macroeconomics</li><li>Incentives</li></ul>
+        <h4>Takeaways · Self-test</h4>
+        <p>5 takeaways for study and business, 3 self-test questions, e.g. “Define opportunity cost and give an example from your own life this week.”</p>
+        <p class="foot">Section titles and timestamps are from the real document; the overview is shortened here. <a href="https://xjpyg4jeph2l.jp.larksuite.com/docx/LuGoduU5VoC3Ysx5Bpuj6zlUpgh" target="_blank" rel="noopener">View on Lark →</a> (view-only, gives no access to the agent)</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">04 · Tests</div>
+    <h2>Nine messages in the real Lark chat</h2>
+    <p class="sub">Time and model calls come from the Hermes gateway log. Failures are kept in the table, with what was changed.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>Scenario</th><th>Time</th><th>Calls</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td>“Who are you?” after pairing</td><td class="n">4.0 s</td><td class="n">1</td><td><span class="pill ok">pass</span></td></tr>
+          <tr><td class="n">2</td><td>Lecture link, <i>Globalization and Trade and Poverty</i> (08:43)</td><td class="n">27.6 s</td><td class="n">4</td><td><span class="pill warn">bug</span> italics shown as <code>*…*</code></td></tr>
+          <tr><td class="n">3</td><td>Same video after the italic fix</td><td class="n">38.2 s</td><td class="n">5</td><td><span class="pill ok">pass</span></td></tr>
+          <tr><td class="n">4</td><td>“Summarize my lecture”, no link, same session</td><td class="n">8.7 s</td><td class="n">1</td><td><span class="pill bad">fail</span> made-up Google Drive link</td></tr>
+          <tr><td class="n">5</td><td>Same message, new session, after the link rule</td><td class="n">8.2 s</td><td class="n">3</td><td><span class="pill ok">pass</span> asked for the link</td></tr>
+          <tr><td class="n">6</td><td>Video that does not exist</td><td class="n">4.2 s</td><td class="n">2</td><td><span class="pill ok">pass</span> exact error, no guessing</td></tr>
+          <tr><td class="n">7</td><td><i>Intro to Economics</i> (11:56) + “for a 5-minute presentation”</td><td class="n">22.0 s</td><td class="n">3</td><td><span class="pill ok">pass</span></td></tr>
+          <tr><td class="n">8</td><td>Follow-up “send me the link again”</td><td class="n">3.9 s</td><td class="n">1</td><td><span class="pill ok">pass</span> exact Lark link</td></tr>
+          <tr><td class="n">9</td><td>“Who are you and what can you do?”</td><td class="n">2.5 s</td><td class="n">1</td><td><span class="pill ok">pass</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="fixes">
+      <div class="fix"><b>Italic marks leaking into the document</b><span>The Markdown → Lark converter only knew bold and links. Added single-asterisk italics; “2 * 3 * 4” and “* bullet” stay as they are.</span></div>
+      <div class="fix"><b>A link the agent made up</b><span>The model rebuilt the Lark document ID into a Google Drive URL. The Profile and the skill now say: share only the exact link the document command returned.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">05 · Limits</div>
+    <h2>What it can and cannot do</h2>
+    <div class="cols">
+      <div class="card"><h3>Can</h3><ul><li>Public YouTube videos with subtitles</li><li>English or Vietnamese, following your message</li><li>Requests like “shorter” or “for a presentation”</li><li>Long videos, split into chunks</li></ul></div>
+      <div class="card"><h3>Cannot</h3><ul><li>Videos without subtitles, private or deleted videos</li><li>Drive, Zoom or mp4 files</li><li>Listening to audio, editing old documents</li><li>Making slides or doing homework</li></ul></div>
+      <div class="card"><h3>Needs a person</h3><ul><li>Clicking 1–2 timestamps before an exam or presentation</li><li>Approving pairing for a new user</li><li>Videos with poor subtitles</li><li>Free model limit (HTTP 429): resend later</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">06 · Built with</div>
+    <h2>Parts</h2>
+    <div class="built" style="margin-top:18px">
+      <div><b>Hermes Agent</b>v0.23.0, Profile as <code>SOUL.md</code>, Lark gateway with profile routing</div>
+      <div><b>Skill</b><code>lark-lecture-notes</code>: <code>prepare.py</code> + <code>lark_doc.py</code></div>
+      <div><b>Lark Open API</b>bot app, docx + drive permissions, persistent connection</div>
+      <div><b>Model</b><code>agnes-2.5-flash</code> (free tier); Claude Code as the coding assistant</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="notice">This is a static page. It calls no API, holds no keys or user data, and nobody can run the agent from here.</div>
+    Nhan Trường Phát · AI Agent assignment · AI Education Workshop HUIT × DIIS · 2026
+  </div>
+</footer>
+</body>
+</html>
